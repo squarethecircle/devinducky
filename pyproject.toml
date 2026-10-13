@@ -2,6 +2,7 @@
 name = "devinducky"
 version = "0.1.0"
 description = "Drive and watch Devin sessions from a duckyPad Pro"
+license = "MIT"
 requires-python = ">=3.11"
 dependencies = ["hidapi>=0.14", "httpx>=0.27", "pynput>=1.7"]
 

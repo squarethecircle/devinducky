@@ -119,3 +119,7 @@ color  = [120, 0, 255]
 `uv run pytest`. The tests need no pad, network, or browser.
 
 Hardware details are in [`hid.py`](src/devinducky/hid.py): VID `0x0483`, PID `0xD11D`, and the protocol from the [duckyPad HID docs](https://github.com/duckyPad/duckyPad-Profile-Autoswitcher/blob/master/HID_details.md). On macOS the device is opened non-exclusively, so other tools can share it.
+
+## License
+
+[MIT](LICENSE)
