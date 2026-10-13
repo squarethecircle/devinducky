@@ -108,19 +108,25 @@ class PadInput:
             self._decode(self.mods, name)
 
     def _intercept(self, event_type, event):
-        """macOS: decode F-keys with the modifier flags carried on the event itself.
+        """macOS: decode F-keys with the modifier flags carried on the event itself,
+        and keep the pad's hotkeys from reaching other apps.
 
         Tracking modifier presses/releases (self.mods) goes wrong for good if one
         release is missed, e.g. while macOS briefly disables the event tap during
         an app switch, and every hotkey after that decodes to nothing.
         """
         import Quartz
+        if event_type not in (Quartz.kCGEventKeyDown, Quartz.kCGEventKeyUp):
+            return event
+        name = self._fkey_vks.get(Quartz.CGEventGetIntegerValueField(event, Quartz.kCGKeyboardEventKeycode))
+        if not name:
+            return event
+        mods = mods_from_flags(Quartz.CGEventGetFlags(event))
         if event_type == Quartz.kCGEventKeyDown:
-            vk = Quartz.CGEventGetIntegerValueField(event, Quartz.kCGKeyboardEventKeycode)
-            name = self._fkey_vks.get(vk)
-            if name:
-                self._decode(mods_from_flags(Quartz.CGEventGetFlags(event)), name)
-        return event
+            self._decode(mods, name)
+        # Swallow the pad's hotkeys so they don't also reach the frontmost app
+        # (a terminal turns a modified F13-F20 into escape-sequence junk).
+        return None if decode(mods, name) else event
 
     def _decode(self, mods, fkey):
         ev = decode(mods, fkey)
