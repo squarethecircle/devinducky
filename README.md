@@ -20,7 +20,7 @@ macOS only, because it uses AppleScript to read and focus browser tabs.
  ├──────┼──────┼──────┼──────┤
  │ NEW  │ DASH │ REFR │ INFO │  new-session page · sessions list · refresh now · OLED summary
  └──────┴──────┴──────┴──────┘
- upper encoder: rotate = move the cursor across bound slots, push = open it
+ upper encoder: rotate = step through bound sessions (the browser follows when you stop), push = open
  lower encoder: rotate = system volume, push = refresh
 ```
 

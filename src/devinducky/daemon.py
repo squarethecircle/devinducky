@@ -19,7 +19,7 @@ log = logging.getLogger("devinducky")
 
 GREEN, RED, DIM = (0, 255, 60), (255, 0, 0), (40, 40, 40)
 CURSOR_TIMEOUT_S = 10
-BANNER_DEBOUNCE_S = 0.4
+GOTO_SETTLE_S = 0.35            # switch tabs once the wheel stops turning
 API_OK, API_AUTH, API_NET = 0, 1, 2
 
 
@@ -43,7 +43,8 @@ class Daemon:
         self.finished_since = {}      # session_id -> unix ts first seen finished
         self.cursor = None            # slot index
         self.cursor_moved = 0.0
-        self.banner_due = None        # monotonic time to show the cursor banner
+        self.goto_due = None          # monotonic time to switch the browser to the cursor session
+        self.nav_lock = threading.Lock()   # one tab switch at a time, in order
         self.armed = {}               # launch index -> monotonic deadline
         self.api_health = API_OK
         self.failures = 0
@@ -232,11 +233,12 @@ class Daemon:
 
     def _focus_or_open(self, sid, url):
         """Switch to the session's tab if it's already open somewhere; else open a new one."""
-        app = browser.focus_tab(self.cfg["browsers"], sid)
-        if app:
-            log.debug("focused existing %s tab for %s", app, sid)
-        else:
-            open_url(url)
+        with self.nav_lock:
+            app = browser.focus_tab(self.cfg["browsers"], sid)
+            if app:
+                log.debug("focused existing %s tab for %s", app, sid)
+            else:
+                open_url(url)
 
     def most_urgent_slot(self):
         with self.lock:
@@ -253,14 +255,7 @@ class Daemon:
         else:
             self.cursor = bound[(bound.index(self.cursor) + step) % len(bound)]
         self.cursor_moved = time.monotonic()
-        self.banner_due = self.cursor_moved + BANNER_DEBOUNCE_S
-
-    def show_cursor_banner(self):
-        sid = self.bindings.get(self.cursor) if self.cursor is not None else None
-        if not sid:
-            return
-        s = self.sessions.get(sid, {})
-        notify("devinducky", f"S{self.cursor + 1} · {s.get('title') or sid[:8]} · {self.states.get(sid, '?')}")
+        self.goto_due = self.cursor_moved + GOTO_SETTLE_S
 
     def tap_launch(self, idx):
         led = keys.led_of_key(keys.LAUNCH_KEYS[idx])
@@ -368,9 +363,10 @@ class Daemon:
             except queue.Empty:
                 pass
             t = time.monotonic()
-            if self.banner_due and t >= self.banner_due:
-                self.banner_due = None
-                self.show_cursor_banner()
+            if self.goto_due and t >= self.goto_due:
+                self.goto_due = None
+                if self.cursor is not None:
+                    self.open_slot(self.cursor)
             for idx, deadline in list(self.armed.items()):
                 if deadline <= t:
                     del self.armed[idx]

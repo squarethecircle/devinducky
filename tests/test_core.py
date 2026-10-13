@@ -155,3 +155,21 @@ def test_parse_tab_list():
     out = "1\t1\thttps://a.com/x,y\n1\t2\thttps://app.devin.ai/sessions/abc\n2\t1\t\njunk\n"
     assert browser.parse_tab_list(out) == [
         (1, 1, "https://a.com/x,y"), (1, 2, "https://app.devin.ai/sessions/abc"), (2, 1, "")]
+
+
+def test_top_wheel_switches_to_session_after_settling(tmp_path, monkeypatch):
+    from devinducky import daemon
+    from devinducky.render import Frame
+    d = daemon.Daemon.__new__(daemon.Daemon)
+    d.bindings = Bindings(str(tmp_path / "b.json"), keys.NUM_SLOTS)
+    d.bindings.bind(0, "aaa")
+    d.bindings.bind(3, "ddd")
+    d.cursor, d.goto_due, d.sessions, d.frame = None, None, {}, Frame()
+    opened = []
+    monkeypatch.setattr(d, "open_slot", opened.append, raising=False)
+    d.handle("press", keys.ENC1_CW)
+    d.handle("press", keys.ENC1_CW)
+    assert d.cursor == 3 and opened == []           # nothing until the wheel stops
+    assert d.goto_due is not None
+    d.handle("press", keys.ENC1_CCW)
+    assert d.cursor == 0
