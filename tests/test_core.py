@@ -131,9 +131,18 @@ def test_tap_vs_hold():
     c.down(1, 0.0)
     assert c.due(0.5) == [] and c.up(1, 0.6) == "tap"
     c.down(2, 1.0)
-    assert c.due(1.69) == [] and c.due(1.71) == [2] and c.due(2.0) == []
-    assert c.up(2, 2.5) is None                   # hold already fired; release is ignored
-    assert c.up(9, 3.0) is None                   # stray release
+    assert c.due(1.69) == [] and c.due(1.71) == [2] and c.due(2.0) == []   # "ready" once
+    assert c.up(2, 2.5) == "hold"                 # the hold itself fires on release
+    assert c.up(9, 3.0) == "tap"                  # release without a down: pad woke up on the press
+
+
+def test_lost_release_never_becomes_a_hold():
+    c = HoldClassifier(700)
+    c.down(3, 0.0)                                # tap whose release never arrives (Mac waking)
+    assert c.due(1.0) == [3]                      # only the visual cue
+    assert c.due(6.0) == [] and 3 not in c.pressed   # given up on
+    c.down(4, 10.0)
+    assert c.up(4, 16.0) is None                  # release far too late: ignore, don't rebind
 
 
 # ---------- pad profile ----------

@@ -2,8 +2,8 @@
 
 The pad types a hotkey on key-down and another on key-up (see keys.py). The
 listener decodes those, and HoldClassifier times the gap so a quick tap and a
-long hold become different actions. The hold fires *while* the key is still
-down (at hold_ms), so the LED can confirm before you let go.
+long hold become different actions. A "ready" event fires while the key is
+still down (at hold_ms) so the LED can confirm; the hold itself fires on release.
 """
 
 import logging
@@ -17,28 +17,47 @@ log = logging.getLogger(__name__)
 
 
 class HoldClassifier:
-    """Pure state machine; callers pass the clock in so it's testable."""
+    """Pure state machine; callers pass the clock in so it's testable.
+
+    A hold only counts once the key is actually released. If a release is lost
+    (it happens right after the Mac wakes) the press is dropped rather than
+    turning into a hold, because a hold rebinds or unbinds the key.
+    """
+
+    MAX_HOLD_S = 5.0                 # longer than this = a lost release, not a hold
 
     def __init__(self, hold_ms):
         self.hold_s = hold_ms / 1000
-        self.pressed = {}            # key -> down time; removed once hold fires
+        self.pressed = {}            # key -> down time
+        self.signalled = set()       # keys already reported as "ready" (held past hold_ms)
 
     def down(self, key, now):
         self.pressed[key] = now
+        self.signalled.discard(key)
 
     def up(self, key, now):
-        """Returns "tap" if released before the hold fired, else None."""
+        """"tap", "hold" or None (lost release)."""
         t0 = self.pressed.pop(key, None)
+        self.signalled.discard(key)
         if t0 is None:
-            return None              # hold already fired, or we missed the down
-        return "tap" if now - t0 < self.hold_s else "hold"
+            # No down seen: the pad was asleep and its firmware spent the press on
+            # waking up (it still runs the release script). Count it as a tap.
+            return "tap"
+        held = now - t0
+        if held < self.hold_s:
+            return "tap"
+        return "hold" if held <= self.MAX_HOLD_S else None
 
     def due(self, now):
-        """Keys whose hold threshold has passed; each fires once."""
-        fired = [k for k, t0 in self.pressed.items() if now - t0 >= self.hold_s]
-        for k in fired:
-            del self.pressed[k]
-        return fired
+        """Keys that just passed hold_ms while still down (for a "ready" cue); each once."""
+        for k, t0 in list(self.pressed.items()):
+            if now - t0 > self.MAX_HOLD_S:
+                del self.pressed[k]              # its release was lost
+                self.signalled.discard(k)
+        ready = [k for k, t0 in self.pressed.items()
+                 if now - t0 >= self.hold_s and k not in self.signalled]
+        self.signalled.update(ready)
+        return ready
 
 
 _MOD_NAMES = {
@@ -70,7 +89,7 @@ def decode(mods, fkey):
 class PadInput:
     """Runs the pynput listener and emits (kind, key) on self.events.
 
-    kind is "tap" or "hold" for slot keys, "press" for everything else.
+    kind is "tap", "ready" or "hold" for slot keys, "press" for everything else.
     """
 
     def __init__(self, hold_ms, on_raw=None):
@@ -123,8 +142,9 @@ class PadInput:
             if ev.kind == "down":
                 self.clf.down(ev.key, now)
             elif ev.kind == "up":
-                if self.clf.up(ev.key, now) == "tap":
-                    self.events.put(("tap", ev.key))
+                kind = self.clf.up(ev.key, now)
+                if kind:
+                    self.events.put((kind, ev.key))
             else:
                 self.events.put(("press", ev.key))
 
@@ -134,7 +154,7 @@ class PadInput:
             with self._lock:
                 fired = self.clf.due(time.monotonic())
             for k in fired:
-                self.events.put(("hold", k))
+                self.events.put(("ready", k))
 
     def start(self):
         import sys

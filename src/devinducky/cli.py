@@ -201,7 +201,33 @@ def cmd_gen_profile(args):
     print("Configurator: Import → pick this zip → Save. Then close the configurator.")
 
 
-def cmd_install(args):
+def _service():
+    return f"gui/{os.getuid()}/{LABEL}"
+
+
+def _launchd_pid():
+    """PID of the launchd-managed daemon, 0 if loaded but not running, None if not loaded."""
+    out = subprocess.run(["launchctl", "print", _service()], capture_output=True, text=True)
+    if out.returncode != 0:
+        return None
+    for line in out.stdout.splitlines():
+        if line.strip().startswith("pid = "):
+            return int(line.split("=")[1])
+    return 0
+
+
+def _stray_daemons(exclude):
+    """Other `devinducky run` processes (e.g. one left running in a terminal)."""
+    out = subprocess.run(["pgrep", "-f", "devinducky run"], capture_output=True, text=True)
+    pids = {int(p) for p in out.stdout.split()} - {os.getpid(), exclude or -1}
+    # `uv run` wraps the real process; keep only processes whose parent isn't also listed.
+    def ppid(pid):
+        r = subprocess.run(["ps", "-o", "ppid=", "-p", str(pid)], capture_output=True, text=True)
+        return int(r.stdout.strip() or 0)
+    return sorted(p for p in pids if ppid(p) not in pids and ppid(p) != exclude)
+
+
+def _write_plist():
     exe = shutil.which("devinducky") or os.path.join(os.path.dirname(sys.executable), "devinducky")
     os.makedirs(config.HOME, exist_ok=True)
     plist = {
@@ -215,18 +241,59 @@ def cmd_install(args):
     os.makedirs(os.path.dirname(PLIST), exist_ok=True)
     with open(PLIST, "wb") as f:
         plistlib.dump(plist, f)
-    uid = os.getuid()
-    subprocess.run(["launchctl", "bootout", f"gui/{uid}/{LABEL}"], capture_output=True)
-    subprocess.run(["launchctl", "bootstrap", f"gui/{uid}", PLIST], check=True)
-    print(f"installed {PLIST}; logs: {config.LOG_FILE}")
-    print(f"Grant Accessibility to {os.path.realpath(sys.executable)} if keys aren't seen under launchd.")
+    return exe
 
 
-def cmd_uninstall(args):
-    subprocess.run(["launchctl", "bootout", f"gui/{os.getuid()}/{LABEL}"], capture_output=True)
+def cmd_up(args):
+    exe = _write_plist()
+    if _launchd_pid() is None:
+        subprocess.run(["launchctl", "bootstrap", f"gui/{os.getuid()}", PLIST], check=True)
+    # Start it now (RunAtLoad alone can leave a fresh bootstrap idle); -k restarts a running one.
+    subprocess.run(["launchctl", "kickstart", "-k", _service()], check=True)
+    for _ in range(20):
+        pid = _launchd_pid()
+        if pid:
+            break
+        time.sleep(0.1)
+    if not pid:
+        sys.exit(f"devinducky didn't start; see {os.path.join(config.HOME, 'launchd.err')}")
+    print(f"devinducky is up (pid {pid}), starts at login. Logs: devinducky logs")
+    stray = _stray_daemons(pid)
+    if stray:
+        print(f"warning: another devinducky is running outside launchd (pid {', '.join(map(str, stray))}); "
+              "stop it or every key press will act twice.")
+    py = os.path.realpath(sys.executable)
+    print(f"If pad keys do nothing, grant Accessibility to {py}\n"
+          f"  (System Settings › Privacy & Security › Accessibility, + then Cmd-Shift-G to paste the path).")
+
+
+def cmd_down(args):
+    was = _launchd_pid()
+    subprocess.run(["launchctl", "bootout", _service()], capture_output=True)
     if os.path.exists(PLIST):
         os.remove(PLIST)
-    print("uninstalled")
+    print("devinducky is down." if was is not None else "devinducky wasn't running under launchd.")
+    stray = _stray_daemons(None)
+    if stray:
+        print(f"note: devinducky still running outside launchd (pid {', '.join(map(str, stray))}).")
+
+
+def cmd_status(args):
+    pid = _launchd_pid()
+    if pid is None:
+        print("down")
+    elif pid == 0:
+        print(f"loaded but not running (crashed?); see {os.path.join(config.HOME, 'launchd.err')}")
+    else:
+        print(f"up (pid {pid})")
+    if os.path.exists(config.LOG_FILE):
+        with open(config.LOG_FILE) as f:
+            tail = f.readlines()[-5:]
+        print("".join("  " + l for l in tail), end="")
+
+
+def cmd_logs(args):
+    os.execvp("tail", ["tail", "-n", "40", "-F", config.LOG_FILE])
 
 
 def main(argv=None):
@@ -243,8 +310,11 @@ def main(argv=None):
     g = sub.add_parser("gen-profile", help="write the duckyPad profile scripts")
     g.add_argument("--out", default="profile")
     g.set_defaults(fn=cmd_gen_profile)
-    sub.add_parser("install", help="install the launchd agent").set_defaults(fn=cmd_install)
-    sub.add_parser("uninstall", help="remove the launchd agent").set_defaults(fn=cmd_uninstall)
+    sub.add_parser("up", aliases=["install", "restart"],
+                   help="run in the background (launchd; restarts if running, starts at login)").set_defaults(fn=cmd_up)
+    sub.add_parser("down", aliases=["uninstall"], help="stop the background daemon").set_defaults(fn=cmd_down)
+    sub.add_parser("status", help="is the background daemon running?").set_defaults(fn=cmd_status)
+    sub.add_parser("logs", help="follow the daemon log").set_defaults(fn=cmd_logs)
     args = p.parse_args(argv)
     args.fn(args)
 

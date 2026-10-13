@@ -159,7 +159,9 @@ class Daemon:
         log.debug("event %s %s", kind, key)
         slot = keys.slot_of(key)
         if slot is not None:
-            if kind == "hold":
+            if kind == "ready":          # held long enough; let go to bind
+                self.frame.set_effect(keys.led_of_slot(slot), "solid", WHITE, 5)
+            elif kind == "hold":
                 self.frame.set_effect(keys.led_of_slot(slot), "solid", WHITE, 5)
                 threading.Thread(target=self.bind_from_tab, args=(slot,), daemon=True).start()
             elif kind == "tap":

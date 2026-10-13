@@ -11,7 +11,7 @@ macOS only, because it uses AppleScript to read and focus browser tabs.
 ```
  ┌──────┬──────┬──────┬──────┐
  │ S1   │ S2   │ S3   │ S4   │  session slots, all empty until you bind them
- ├──────┼──────┼──────┼──────┤    hold (~0.7 s) = bind to the Devin session in your active browser tab
+ ├──────┼──────┼──────┼──────┤    hold (~0.7 s, LED turns white, let go) = bind to the Devin session in your active tab
  │ S5   │ S6   │ S7   │ S8   │                    (hold on a non-Devin tab = unbind)
  ├──────┼──────┼──────┼──────┤    tap           = go to that session
  │ S9   │ S10  │ S11  │ S12  │    LED           = session state
@@ -57,28 +57,29 @@ In the other direction, the daemon drives the pad over HID. It sets each key's L
 1. Put a Devin **Personal Access Token** in your shell profile: `export DEVIN_API_KEY=…`.
    - The daemon reads it from the environment. Under launchd it reads it from your login shell instead.
    - The key is never written to disk.
-2. `uv sync`
-3. `uv run devinducky gen-profile` writes `profile/duckyPad_Profile_devinducky.zip`. In the [duckyPad configurator](https://github.com/duckyPad/duckyPad-Configurator):
+2. `uv tool install --editable .` puts `devinducky` on your PATH (in `~/.local/bin`). The command runs this checkout, so code changes apply after `devinducky restart`.
+3. `devinducky gen-profile` writes `profile/duckyPad_Profile_devinducky.zip`. In the [duckyPad configurator](https://github.com/duckyPad/duckyPad-Configurator):
    1. **Import** the zip.
    2. **Save** to the pad.
    3. **Close the configurator.** It holds the device while it's open.
    - When you re-import, delete the old profile first, because Import adds a new copy.
    - Re-run `gen-profile` after renaming launch presets.
 4. Grant **Accessibility** to your terminal in System Settings › Privacy & Security. Without it, no key presses are seen.
-5. `uv run devinducky test-pad` cycles the LEDs and prints key down/up events with timings.
-6. `uv run devinducky which-tab` prints the active tab's session ID. The first run triggers macOS's **Automation** prompt.
-7. `uv run devinducky run -v` runs the daemon in the foreground.
+5. `devinducky test-pad` cycles the LEDs and prints key down/up events with timings.
+6. `devinducky which-tab` prints the active tab's session ID. The first run triggers macOS's **Automation** prompt.
+7. `devinducky up` starts the daemon in the background. Use `devinducky run -v` instead to run it in the foreground while debugging.
 
 ### Running in the background
 
 ```sh
-uv run devinducky install      # launchd agent com.devinducky.daemon, starts at login, restarts if it dies
-tail -f ~/.devinducky/daemon.log
-launchctl kickstart -k gui/$(id -u)/com.devinducky.daemon   # restart after code/config changes
-uv run devinducky uninstall
+devinducky up        # start (or restart) under launchd; also starts at login and restarts if it dies
+devinducky status    # running? plus the last few log lines
+devinducky logs      # follow ~/.devinducky/daemon.log
+devinducky restart   # after changing code or config.toml
+devinducky down      # stop, and don't start at login
 ```
 
-Under launchd, the process that needs Accessibility is the venv's real Python binary, not your terminal. `install` prints its path. Add that path in System Settings.
+Under launchd, the process that needs Accessibility is the real Python binary, not your terminal. `up` prints its path; add it in System Settings. `up` also warns if a foreground `devinducky run` is still going, because with two daemons every key press acts twice.
 
 ## Config: `~/.devinducky/config.toml`
 
@@ -104,7 +105,7 @@ color  = [120, 0, 255]
 # also: playbook_id, title, devin_mode, max_acu_limit, tags
 ```
 
-`uv run devinducky playbooks` lists your org's playbook IDs. Launched sessions are tagged `devinducky`.
+`devinducky playbooks` lists your org's playbook IDs. Launched sessions are tagged `devinducky`.
 
 ## Troubleshooting
 
@@ -113,6 +114,7 @@ color  = [120, 0, 255]
 | Keys do nothing | Is the daemon running? Does the right process have Accessibility? Is the pad on the devinducky profile? Check with `test-pad`. |
 | LEDs never change | Close the duckyPad configurator. |
 | Hold flashes red | The active tab isn't a Devin session, or Automation permission for the browser was denied. Check with `which-tab`. |
+| First press after a while does nothing | The pad was asleep and that press woke it. It now counts as a tap; if not, press again. |
 | INFO says API KEY ERROR | `DEVIN_API_KEY` is missing or invalid. Under launchd, make sure your login shell exports it. |
 
 ## Development
