@@ -104,6 +104,8 @@ def profile_scripts(cfg):
         part = "release" if ev.kind == "up" else "press"
         out[(ev.key, part)] = hk.ducky()
     out[(keys.KEY_INFO, "press")] = INFO_SCRIPT
+    out[(keys.ENC2_CW, "press")] = "MK_VOLUP"      # lower wheel is a plain volume knob,
+    out[(keys.ENC2_CCW, "press")] = "MK_VOLDOWN"   # handled on the pad without the daemon
     labels = {k: f"S{k}" for k in keys.SLOT_KEYS}
     for i, k in enumerate(keys.LAUNCH_KEYS):
         labels[k] = (cfg["launch"][i].get("name", f"L{i + 1}")[:5] if i < len(cfg["launch"]) else f"L{i + 1}")
@@ -154,7 +156,7 @@ OLED_RESTORE
 
 PROFILE_NAME = "devinducky"
 ENCODER_LABELS = {keys.ENC1_CW: "SEL+", keys.ENC1_CCW: "SEL-", keys.ENC1_PUSH: "OPEN",
-                  keys.ENC2_CW: "-", keys.ENC2_CCW: "-", keys.ENC2_PUSH: "REFR"}
+                  keys.ENC2_CW: "VOL+", keys.ENC2_CCW: "VOL-", keys.ENC2_PUSH: "REFR"}
 
 
 def build_profile(cfg, out_dir):

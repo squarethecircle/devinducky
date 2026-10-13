@@ -21,7 +21,7 @@ macOS only, because it uses AppleScript to read and focus browser tabs.
  │ NEW  │ DASH │ REFR │ INFO │  new-session page · sessions list · refresh now · OLED summary
  └──────┴──────┴──────┴──────┘
  upper encoder: rotate = move the cursor across bound slots, push = open it
- lower encoder: push = refresh
+ lower encoder: rotate = system volume, push = refresh
 ```
 
 "Go to that session" first looks for a tab that already has the session open (Chrome, Arc, Brave, Edge, Chromium, Safari) and brings it to the front. It opens a new tab only if there isn't one.
