@@ -1,7 +1,10 @@
 """Read the active browser tab's URL with AppleScript and pull out a Devin session ID."""
 
+import logging
 import re
 import subprocess
+
+log = logging.getLogger(__name__)
 
 # AppleScript for the active tab's URL, per browser family.
 _CHROMIUM = 'tell application "{app}" to get URL of active tab of front window'
@@ -105,7 +108,8 @@ def focus_tab(browsers, needle):
             tpl = _FOCUS.get(app, _FOCUS["chromium"])
             _osascript(tpl.replace("{app}", app).replace("{w}", str(hit[0])).replace("{t}", str(hit[1])))
             return app
-        except (BrowserError, subprocess.TimeoutExpired):
+        except (BrowserError, subprocess.TimeoutExpired) as e:
+            log.warning("focus_tab %s: %s", app, e)
             continue
     return None
 

@@ -173,3 +173,9 @@ def test_top_wheel_switches_to_session_after_settling(tmp_path, monkeypatch):
     assert d.goto_due is not None
     d.handle("press", keys.ENC1_CCW)
     assert d.cursor == 0
+
+
+def test_mods_from_event_flags():
+    from devinducky.input import mods_from_flags
+    assert mods_from_flags(0x40000 | 0x80000 | 0x800000) == {"ctrl", "alt"}   # Fn flag ignored
+    assert decode(mods_from_flags(0x40000 | 0x80000 | 0x20000 | 0x100000), "f13") is None

@@ -229,16 +229,18 @@ class Daemon:
             return
         s = self.sessions.get(sid)
         url = s["url"] if s and s.get("url") else f"https://app.devin.ai/sessions/{sid}"
-        threading.Thread(target=self._focus_or_open, args=(sid, url), daemon=True).start()
+        threading.Thread(target=self._focus_or_open, args=(slot, sid, url), daemon=True).start()
 
-    def _focus_or_open(self, sid, url):
+    def _focus_or_open(self, slot, sid, url):
         """Switch to the session's tab if it's already open somewhere; else open a new one."""
         with self.nav_lock:
+            t = time.monotonic()
             app = browser.focus_tab(self.cfg["browsers"], sid)
             if app:
-                log.debug("focused existing %s tab for %s", app, sid)
+                log.info("S%d: focused its %s tab (%.2fs)", slot + 1, app, time.monotonic() - t)
             else:
                 open_url(url)
+                log.info("S%d: no open tab, opened %s (%.2fs)", slot + 1, url, time.monotonic() - t)
 
     def most_urgent_slot(self):
         with self.lock:

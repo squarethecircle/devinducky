@@ -6,11 +6,14 @@ long hold become different actions. The hold fires *while* the key is still
 down (at hold_ms), so the LED can confirm before you let go.
 """
 
+import logging
 import queue
 import threading
 import time
 
 from . import keys
+
+log = logging.getLogger(__name__)
 
 
 class HoldClassifier:
@@ -50,6 +53,14 @@ def _key_name(k):
     return getattr(k, "name", None)  # pynput Key enum members have .name; chars don't
 
 
+# Quartz modifier masks (CGEventFlags).
+_FLAG_MODS = (("ctrl", 0x40000), ("alt", 0x80000), ("shift", 0x20000), ("cmd", 0x100000))
+
+
+def mods_from_flags(flags):
+    return {name for name, mask in _FLAG_MODS if flags & mask}
+
+
 def decode(mods, fkey):
     """Held modifier names + an F-key name -> keys.Event, or None."""
     order = [m for m in ("ctrl", "alt", "shift", "cmd") if m in mods]
@@ -68,15 +79,36 @@ class PadInput:
         self.mods = set()
         self.on_raw = on_raw          # optional debug hook: (Event, timestamp)
         self._lock = threading.Lock()
+        self._fkey_vks = None         # macOS: virtual keycode -> "f13".."f20"
 
     def _on_press(self, k):
         name = _key_name(k)
         if name in _MOD_NAMES:
             self.mods.add(_MOD_NAMES[name])
-        elif name in keys.FKEYS:
-            ev = decode(self.mods, name)
-            if ev:
-                self._handle(ev)
+        elif name in keys.FKEYS and self._fkey_vks is None:   # not on macOS: tracked modifiers
+            self._decode(self.mods, name)
+
+    def _intercept(self, event_type, event):
+        """macOS: decode F-keys with the modifier flags carried on the event itself.
+
+        Tracking modifier presses/releases (self.mods) goes wrong for good if one
+        release is missed, e.g. while macOS briefly disables the event tap during
+        an app switch, and every hotkey after that decodes to nothing.
+        """
+        import Quartz
+        if event_type == Quartz.kCGEventKeyDown:
+            vk = Quartz.CGEventGetIntegerValueField(event, Quartz.kCGKeyboardEventKeycode)
+            name = self._fkey_vks.get(vk)
+            if name:
+                self._decode(mods_from_flags(Quartz.CGEventGetFlags(event)), name)
+        return event
+
+    def _decode(self, mods, fkey):
+        ev = decode(mods, fkey)
+        if ev:
+            self._handle(ev)
+        else:
+            log.debug("unmatched hotkey %s+%s", "+".join(sorted(mods)), fkey)
 
     def _on_release(self, k):
         name = _key_name(k)
@@ -105,8 +137,13 @@ class PadInput:
                 self.events.put(("hold", k))
 
     def start(self):
+        import sys
         from pynput import keyboard
-        listener = keyboard.Listener(on_press=self._on_press, on_release=self._on_release)
+        kw = {}
+        if sys.platform == "darwin":
+            self._fkey_vks = {getattr(keyboard.Key, f).value.vk: f for f in keys.FKEYS}
+            kw["darwin_intercept"] = self._intercept
+        listener = keyboard.Listener(on_press=self._on_press, on_release=self._on_release, **kw)
         listener.daemon = True
         listener.start()
         threading.Thread(target=self._hold_loop, daemon=True).start()
