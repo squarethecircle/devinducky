@@ -167,7 +167,10 @@ class Daemon:
         launch = keys.launch_of(key)
         if launch is not None:
             self.tap_launch(launch)
-        elif key in (keys.KEY_OPEN, keys.ENC1_PUSH):
+        elif key == keys.KEY_OPEN:
+            self.frame.set_effect(keys.led_of_key(keys.KEY_OPEN), "fade", WHITE, 0.6)
+            open_url(self.cfg["new_session_url"])
+        elif key == keys.ENC1_PUSH:
             target = self.cursor if self.cursor is not None else self.most_urgent_slot()
             if target is not None:
                 self.open_slot(target)

@@ -19,6 +19,7 @@ DEFAULTS = {
     "browsers": ["Google Chrome", "Arc", "Safari", "Brave Browser", "Microsoft Edge"],
     "session_url_regex": r"app\.devin\.ai/sessions/((?:devin-)?[A-Za-z0-9]+)",
     "dashboard_url": "https://app.devin.ai/sessions",
+    "new_session_url": "https://app.devin.ai/",   # the OPEN key opens this
     "finished_dim_s": 1800,
     "auto_bind_launched": False,
     "pad_profile": 0,          # only paint when this profile is active; 0 = any

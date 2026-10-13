@@ -18,7 +18,7 @@ macOS only, because it uses AppleScript to read and focus browser tabs.
  ├──────┼──────┼──────┼──────┤
  │ L1   │ L2   │ L3   │ L4   │  launch presets: tap to arm (blinks), tap again within 3 s to launch
  ├──────┼──────┼──────┼──────┤
- │ OPEN │ DASH │ REFR │ INFO │  open cursor session · open app.devin.ai · refresh now · OLED summary
+ │ NEW  │ DASH │ REFR │ INFO │  new-session page · sessions list · refresh now · OLED summary
  └──────┴──────┴──────┴──────┘
  upper encoder: rotate = move the cursor across bound slots, push = open it
  lower encoder: push = refresh
@@ -89,6 +89,7 @@ poll_s = 10
 hold_ms = 700
 browsers = ["Google Chrome", "Arc", "Safari"]   # search / focus order
 pad_profile = 0                     # only paint when this pad profile number is active (0 = any)
+new_session_url = "https://app.devin.ai/"   # what the NEW key opens
 notify = { waiting = true, finished = true, error = true }   # macOS banners
 ntfy_url = ""                       # optionally also POST notifications here
 
